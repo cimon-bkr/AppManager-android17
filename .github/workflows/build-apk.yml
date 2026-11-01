@@ -35,10 +35,19 @@ jobs:
             AppManager/**/*.gradle*
             AppManager/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Set up Android SDK (API 37)
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platforms;android-37 build-tools;36.1.0 platform-tools'
+          packages: ''
+
+      - name: Install platform 37 and build tools
+        run: |
+          sdkmanager --list 2>/dev/null | grep -E "platforms;android-37" || true
+          for p in "platforms;android-37.0" "platforms;android-37"; do
+            if sdkmanager --install "$p" >/dev/null 2>&1; then echo "installed $p"; break; fi
+          done
+          sdkmanager --install "build-tools;36.1.0" "platform-tools" || true
+          ls "$ANDROID_HOME/platforms"
 
       - name: Build debug APK
         working-directory: AppManager
