@@ -47,7 +47,11 @@ jobs:
             if sdkmanager --install "$p" >/dev/null 2>&1; then echo "installed $p"; break; fi
           done
           sdkmanager --install "build-tools;36.1.0" "platform-tools" || true
-          ls "$ANDROID_HOME/platforms"
+          # AppManager's server task hardcodes platforms/android-<compileSdk>/android.jar
+          if [ -d "$ANDROID_HOME/platforms/android-37.0" ] && [ ! -e "$ANDROID_HOME/platforms/android-37" ]; then
+            sudo ln -s "$ANDROID_HOME/platforms/android-37.0" "$ANDROID_HOME/platforms/android-37"
+          fi
+          ls -la "$ANDROID_HOME/platforms"
 
       - name: Build debug APK
         working-directory: AppManager
