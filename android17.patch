@@ -1,0 +1,106 @@
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 48dba55..c32cc0f 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -11,6 +11,7 @@
+         android:required="false" />
+ 
+     <uses-permission android:name="android.permission.ACCESS_HIDDEN_PROFILES" />
++    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+     <uses-permission
+         android:name="android.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY"
+diff --git a/app/src/main/java/io/github/muntashirakon/AppManager/settings/Ops.java b/app/src/main/java/io/github/muntashirakon/AppManager/settings/Ops.java
+index 2a84b15..926d36b 100644
+--- a/app/src/main/java/io/github/muntashirakon/AppManager/settings/Ops.java
++++ b/app/src/main/java/io/github/muntashirakon/AppManager/settings/Ops.java
+@@ -30,6 +30,7 @@ import androidx.annotation.StringDef;
+ import androidx.annotation.UiThread;
+ import androidx.annotation.WorkerThread;
+ import androidx.appcompat.app.AlertDialog;
++import androidx.core.app.ActivityCompat;
+ import androidx.core.content.ContextCompat;
+ import androidx.core.app.NotificationManagerCompat;
+ import androidx.fragment.app.FragmentActivity;
+@@ -525,11 +526,27 @@ public class Ops {
+         setMode(MODE_NO_ROOT);
+     }
+ 
++    /**
++     * Android 17 (API 37) blocks local network access (including mDNS discovery used for Wireless
++     * debugging) by default for apps targeting API 37+ unless ACCESS_LOCAL_NETWORK is granted.
++     */
++    @UiThread
++    private static void requestLocalNetworkPermissionIfNeeded(@NonNull FragmentActivity activity) {
++        if (Build.VERSION.SDK_INT < 37) {
++            return;
++        }
++        final String permission = "android.permission.ACCESS_LOCAL_NETWORK";
++        if (ContextCompat.checkSelfPermission(activity, permission) != PackageManager.PERMISSION_GRANTED) {
++            ActivityCompat.requestPermissions(activity, new String[]{permission}, 0);
++        }
++    }
++
+     @UiThread
+     @RequiresApi(Build.VERSION_CODES.R)
+     @NoOps // Although we've used Ops checks, its overall usage does not affect anything
+     public static void connectWirelessDebugging(@NonNull FragmentActivity activity,
+                                                 @NonNull AdbConnectionInterface callback) {
++        requestLocalNetworkPermissionIfNeeded(activity);
+         DialogTitleBuilder builder = new DialogTitleBuilder(activity)
+                 .setTitle(R.string.manual_wireless_debugging_title)
+                 .setEndIcon(R.drawable.ic_open_in_new, v -> {
+diff --git a/app/src/main/java/io/github/muntashirakon/AppManager/utils/appearance/TypefaceUtil.java b/app/src/main/java/io/github/muntashirakon/AppManager/utils/appearance/TypefaceUtil.java
+index d2fa678..0d43c4c 100644
+--- a/app/src/main/java/io/github/muntashirakon/AppManager/utils/appearance/TypefaceUtil.java
++++ b/app/src/main/java/io/github/muntashirakon/AppManager/utils/appearance/TypefaceUtil.java
+@@ -62,7 +62,8 @@ public class TypefaceUtil {
+                     allFontsForThisApp.put(entry.getKey(), entry.getValue());
+                 }
+             }
+-            field.set(null, allFontsForThisApp);
++            // sSystemFontMap is static final: the map is mutated in place. Reassigning it via
++            // Field.set() throws IllegalAccessException on Android 17+ (targetSdk >= 37).
+             field.setAccessible(false);
+         } catch (Exception e) {
+             Log.w(TAG, "Could not restore fonts", e);
+@@ -126,8 +127,9 @@ public class TypefaceUtil {
+                 sOverriddenFonts.put(fontFamily, allFontsForThisApp.get(fontFamily));
+             }
+         }
++        // sSystemFontMap is static final: mutate in place. Reassigning it via Field.set() throws
++        // IllegalAccessException on Android 17+ (targetSdk >= 37).
+         allFontsForThisApp.putAll(fontsMap);
+-        field.set(null, allFontsForThisApp);
+         field.setAccessible(false);
+     }
+ }
+diff --git a/gradle.properties b/gradle.properties
+index 75ed3a8..cb7cfed 100644
+--- a/gradle.properties
++++ b/gradle.properties
+@@ -8,6 +8,8 @@ android.useAndroidX=true
+ android.enableJetifier=false
+ android.nonTransitiveRClass=true
+ android.nonFinalResIds=false
++# AGP 8.13 officially supports up to API 36; allow compiling against API 37 (Android 17)
++android.suppressUnsupportedCompileSdk=37
+ 
+ org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -XX:+UseParallelGC -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8
+ org.gradle.caching=true
+diff --git a/versions.gradle b/versions.gradle
+index 1139c6d..69c79a2 100644
+--- a/versions.gradle
++++ b/versions.gradle
+@@ -1,9 +1,9 @@
+ // SPDX-License-Identifier: GPL-3.0-or-later
+ 
+ ext {
+-    compile_sdk = 36
++    compile_sdk = 37
+     min_sdk = 21
+-    target_sdk = 36
++    target_sdk = 37
+     build_tools = '36.1.0'
+ 
+     // Gradle plugins

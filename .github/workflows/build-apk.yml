@@ -1,0 +1,64 @@
+name: Build AppManager (Android 17)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo (patch)
+        uses: actions/checkout@v4
+
+      - name: Checkout upstream AppManager (pinned)
+        uses: actions/checkout@v4
+        with:
+          repository: MuntashirAkon/AppManager
+          ref: 0d1d926a858c0236d6c2aed0c434992d4187f3a5
+          path: AppManager
+          submodules: recursive
+
+      - name: Apply Android 17 patch
+        working-directory: AppManager
+        run: git apply --ignore-space-change --ignore-whitespace --recount --verbose ../android17.patch
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            AppManager/**/*.gradle*
+            AppManager/gradle/wrapper/gradle-wrapper.properties
+
+      - name: Set up Android SDK (API 37)
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-37 build-tools;36.1.0 platform-tools'
+
+      - name: Build debug APK
+        working-directory: AppManager
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppManager-android17-debug
+          path: AppManager/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="build-${{ github.run_number }}"
+          gh release create "$tag" AppManager/app/build/outputs/apk/debug/*.apk \
+            --repo "${{ github.repository }}" \
+            --title "AppManager Android 17 build ${{ github.run_number }}" \
+            --notes "Debug build of MuntashirAkon/AppManager with Android 17 (API 37) patch."
